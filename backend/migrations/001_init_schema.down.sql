@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS track_history;
+DROP TABLE IF EXISTS tracking;
+DROP TABLE IF EXISTS aircraft;
