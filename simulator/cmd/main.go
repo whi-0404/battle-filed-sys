@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"os"
-	"simulator/service"
+	"simulator/opensky/service"
 	"time"
 
 	"github.com/nats-io/nats.go"
