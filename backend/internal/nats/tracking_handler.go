@@ -1,6 +1,7 @@
 package nats
 
 import (
+	"battlefiled-sys/internal/hub"
 	"battlefiled-sys/internal/tracking/model"
 	"battlefiled-sys/internal/tracking/service"
 	"context"
@@ -13,6 +14,7 @@ import (
 
 type TrackingHandler struct {
 	service *service.TrackingService
+	hub     *hub.Hub
 }
 
 type FlightEvent struct {
@@ -26,9 +28,10 @@ type FlightEvent struct {
 	Timestamp time.Time `json:"ts"`
 }
 
-func NewTrackingHandler(service *service.TrackingService) *TrackingHandler {
+func NewTrackingHandler(service *service.TrackingService, h *hub.Hub) *TrackingHandler {
 	return &TrackingHandler{
 		service: service,
+		hub:     h,
 	}
 }
 
@@ -69,6 +72,20 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 	}
 
 	log.Printf("Saved tracking data for Flight %s", event.ICAO24)
+
+	// Forward lên WebSocket Hub dưới dạng RadarObject
+	h.hub.UpsertObject(hub.RadarObject{
+		ID:          event.ICAO24,
+		Type:        model.ObjAircraft,
+		Layer:       hub.LayerCivil,
+		Callsign:    event.Callsign,
+		Lat:         event.Lat,
+		Lon:         event.Lon,
+		Alt:         event.Alt,
+		Speed:       event.Speed,
+		Heading:     event.Heading,
+		LastUpdated: event.Timestamp,
+	})
 }
 
 func mapFlightEventToTracking(

@@ -11,7 +11,19 @@ type ObjectType string
 const (
 	ObjAircraft ObjectType = "AIRCRAFT"
 	ObjUAV      ObjectType = "UAV"
+	ObjMissile  ObjectType = "MISSILE"
+	ObjThreat   ObjectType = "THREAT"
 	ObjUnknown  ObjectType = "UNKNOWN"
+)
+
+// ThreatLevel mức độ nguy hiểm của đối tượng quân sự
+type ThreatLevel string
+
+const (
+	ThreatLow      ThreatLevel = "LOW"
+	ThreatMedium   ThreatLevel = "MEDIUM"
+	ThreatHigh     ThreatLevel = "HIGH"
+	ThreatCritical ThreatLevel = "CRITICAL"
 )
 
 type ObjectStatus string
@@ -33,6 +45,9 @@ type Aircraft struct {
 	Type ObjectType `json:"type" db:"type"`
 
 	Status ObjectStatus `json:"status" db:"status"`
+
+	// ThreatLevel chỉ áp dụng cho UAV, MISSILE, THREAT objects
+	ThreatLevel ThreatLevel `json:"threat_level" db:"threat_level"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
