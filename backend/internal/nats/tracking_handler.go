@@ -46,6 +46,7 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 	}
 
 	aircraft := model.NewAircraft(event.Callsign, model.ObjAircraft)
+	aircraft.ICAO24 = event.ICAO24
 	aircraft.Callsign = event.Callsign
 
 	err = h.service.SaveAircraft(context.Background(), aircraft)
@@ -64,8 +65,10 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 	err = h.service.SaveTrackingHistory(context.Background(), &trackingHistory)
 	if err != nil {
 		log.Printf("Error saving tracking history: %v", err)
+		return
 	}
 
+	log.Printf("Saved tracking data for Flight %s", event.ICAO24)
 }
 
 func mapFlightEventToTracking(

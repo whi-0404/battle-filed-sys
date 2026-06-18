@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS aircraft (
 
     icao24 VARCHAR(30) UNIQUE NOT NULL,
 
-    callsign VARCHAR(30) UNIQUE NOT NULL,
+    callsign VARCHAR(30) NOT NULL,
 
     type VARCHAR(30) NOT NULL,
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS  track_history (
 
     id UUID PRIMARY KEY default gen_random_uuid(),
 
-    icao24 VARCHAR(30) UNIQUE NOT NULL,
+    icao24 VARCHAR(30) NOT NULL,
 
     latitude DOUBLE PRECISION NOT NULL,
 

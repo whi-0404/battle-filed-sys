@@ -27,25 +27,26 @@ func (r *PostgresRepository) UpdateCurrentTrack(
 	_, err := r.db.ExecContext(
 		ctx,
 		`
-		INSERT INTO current_track(
-			aircraft_id,
-			lat,
-			lon,
-			alt,
+		INSERT INTO tracking (
+			icao24,
+			latitude,
+			longitude,
+			altitude,
 			speed,
 			heading,
-			updated_at
+			last_updated
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
-		ON CONFLICT (aircraft_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (icao24)
 		DO UPDATE SET
-			lat = EXCLUDED.lat,
-			lon = EXCLUDED.lon,
-			alt = EXCLUDED.alt,
+			latitude = EXCLUDED.latitude,
+			longitude = EXCLUDED.longitude,
+			altitude = EXCLUDED.altitude,
 			speed = EXCLUDED.speed,
 			heading = EXCLUDED.heading,
 			last_updated = EXCLUDED.last_updated
 		`,
+		track.ICAO24,
 		track.Lat,
 		track.Lon,
 		track.Alt,
@@ -67,20 +68,18 @@ func (r *PostgresRepository) SaveTrackingHistory(
 	_, err := r.db.ExecContext(
 		ctx,
 		`
-		INSERT INTO track_history(
-			id,
-			aircraft_id,
-			lat,
-			lon,
-			alt,
+		INSERT INTO track_history (
+			icao24,
+			latitude,
+			longitude,
+			altitude,
 			speed,
 			heading,
 			snapshot_at
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)	
-
-	`,
-		history.ID,
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`,
+		history.ICAO24,
 		history.Lat,
 		history.Lon,
 		history.Alt,
@@ -105,9 +104,9 @@ func (r *PostgresRepository) GetCurrentTrack(
 		ctx,
 		&track,
 		`
-			SELECT aircraft_id, lat, lon, alt, speed, heading, updated_at
-			FROM current_track
-			WHERE aircraft_id = $1
+			SELECT icao24, latitude, longitude, altitude, speed, heading, last_updated
+			FROM tracking
+			WHERE icao24 = $1
 		`,
 		aircraftID,
 	)
@@ -125,20 +124,21 @@ func (r *PostgresRepository) SaveAircraft(
 	_, err := r.db.ExecContext(
 		ctx,
 		`
-		INSERT INTO aircraft(
+		INSERT INTO aircraft (
 			icao24,
 			callsign,
 			type,
-			Status,
+			status,
 			created_at,
 			updated_at
 		)
-		VALUES ($1,$2,$3,$4,$5,$6)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (icao24)
 		DO UPDATE SET
 			callsign = EXCLUDED.callsign,
 			type = EXCLUDED.type,
-			Status = EXCLUDED.Status,
+			status = EXCLUDED.status,
+			updated_at = EXCLUDED.updated_at
 		`,
 		aircraft.ICAO24,
 		aircraft.Callsign,
