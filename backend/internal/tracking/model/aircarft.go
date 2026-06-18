@@ -26,6 +26,10 @@ const (
 type Aircraft struct {
 	ID string `json:"id" db:"id"`
 
+	Callsign string `json:"callsign" db:"callsign"`
+
+	ICAO24 string `json:"icao24" db:"icao24"`
+
 	Type ObjectType `json:"type" db:"type"`
 
 	Status ObjectStatus `json:"status" db:"status"`

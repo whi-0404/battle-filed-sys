@@ -6,7 +6,7 @@ import (
 
 type TrackingHistory struct {
 	ID         string    `json:"id" db:"id"`
-	ObjectID   string    `json:"object_id" db:"object_id"`
+	ICAO24     string    `json:"icao24" db:"icao24"`
 	Lat        float64   `json:"lat" db:"latitude"`
 	Lon        float64   `json:"lon" db:"longitude"`
 	Alt        float64   `json:"alt" db:"altitude"`
