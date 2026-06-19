@@ -26,7 +26,6 @@ const (
 	uavSpeedMin = 80.0
 	uavSpeedMax = 180.0
 
-	batteryDrainPerTick = 0.00005
 )
 
 type UAVEngine struct {
@@ -54,7 +53,6 @@ func (e *UAVEngine) spawnUAVs() {
 			Alt:         uavAltMin + rand.Float64()*(uavAltMax-uavAltMin),
 			Heading:     rand.Float64() * 360,
 			Speed:       uavSpeedMin + rand.Float64()*(uavSpeedMax-uavSpeedMin),
-			BatteryPct:  70 + rand.Float64()*30,
 			BaseLat:     lat,
 			BaseLon:     lon,
 			ThreatLevel: model.ThreatLow,
@@ -65,7 +63,7 @@ func (e *UAVEngine) spawnUAVs() {
 
 func (e *UAVEngine) Run(ctx context.Context) {
 	ticker := time.NewTicker(uavTickInterval)
-	defer ticker.Stop()
+	defer ticker.Stop() 
 
 	log.Println("[uav-engine] Started – tick every", uavTickInterval)
 
@@ -86,7 +84,6 @@ func (e *UAVEngine) Run(ctx context.Context) {
 func (e *UAVEngine) updateUAV(uav *model.MilitaryObject) {
 	dtHours := uavTickInterval.Hours()
 
-	uav.BatteryPct -= batteryDrainPerTick
 	if uav.BatteryPct < 0 {
 		uav.BatteryPct = 0
 	}
@@ -134,7 +131,6 @@ func toEvent(obj *model.MilitaryObject) model.MilitaryEvent {
 		Speed:       obj.Speed,
 		ThreatLevel: obj.ThreatLevel,
 		Status:      obj.Status,
-		BatteryPct:  obj.BatteryPct,
 		TargetLat:   obj.TargetLat,
 		TargetLon:   obj.TargetLon,
 		Timestamp:   time.Now(),
