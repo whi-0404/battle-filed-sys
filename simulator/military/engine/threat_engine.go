@@ -20,12 +20,11 @@ const (
 	threatSpeedMax  = 300.0
 	threatAltMin    = 100.0
 	threatAltMax    = 10000.0
-	threatLifeMin   = 30  // giây
-	threatLifeMax   = 120 // giây
-	threatSpawnRate = 8   // giây giữa các lần thêm threat mới
+	threatLifeMin   = 30
+	threatLifeMax   = 120
+	threatSpawnRate = 8
 )
 
-// ThreatEngine tạo và quản lý các unknown threat tracks
 type ThreatEngine struct {
 	pub      *publisher.NatsPublisher
 	threats  map[string]*model.MilitaryObject
@@ -38,7 +37,6 @@ func NewThreatEngine(pub *publisher.NatsPublisher) *ThreatEngine {
 		pub:     pub,
 		threats: make(map[string]*model.MilitaryObject),
 	}
-	// Seed với 3 threats ban đầu
 	for i := 0; i < 3; i++ {
 		t := e.newThreat()
 		e.threats[t.ID] = t
@@ -47,11 +45,9 @@ func NewThreatEngine(pub *publisher.NatsPublisher) *ThreatEngine {
 	return e
 }
 
-// newThreat tạo một unknown threat object ngẫu nhiên
 func (e *ThreatEngine) newThreat() *model.MilitaryObject {
 	e.idxCount++
 
-	// Threat level ngẫu nhiên với xác suất tăng dần theo mức độ
 	var lvl model.ThreatLevel
 	r := rand.Float64()
 	switch {
@@ -83,7 +79,6 @@ func (e *ThreatEngine) newThreat() *model.MilitaryObject {
 	}
 }
 
-// Run bắt đầu threat engine loop
 func (e *ThreatEngine) Run(ctx context.Context) {
 	ticker := time.NewTicker(threatTickInterval)
 	spawnTicker := time.NewTicker(threatSpawnRate * time.Second)
@@ -99,7 +94,6 @@ func (e *ThreatEngine) Run(ctx context.Context) {
 			return
 
 		case <-spawnTicker.C:
-			// Tự động thêm threat mới nếu còn chỗ
 			e.mu.Lock()
 			if len(e.threats) < threatMaxCount {
 				t := e.newThreat()
@@ -112,7 +106,6 @@ func (e *ThreatEngine) Run(ctx context.Context) {
 			now := time.Now().Unix()
 			e.mu.Lock()
 			for id, t := range e.threats {
-				// Xóa threat đã hết hạn
 				if now > t.ThreatExpiry {
 					delete(e.threats, id)
 					log.Printf("[threat-engine] Threat %s expired", id)

@@ -73,7 +73,6 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 
 	log.Printf("Saved tracking data for Flight %s", event.ICAO24)
 
-	// Forward lên WebSocket Hub dưới dạng RadarObject
 	h.hub.UpsertObject(hub.RadarObject{
 		ID:          event.ICAO24,
 		Type:        model.ObjAircraft,

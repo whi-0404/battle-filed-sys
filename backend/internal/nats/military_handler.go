@@ -12,7 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// MilitaryHandler xử lý events từ NATS subject "military.position.updated"
+// NATS subject "military.position.updated"
 type MilitaryHandler struct {
 	service *service.TrackingService
 	hub     *hub.Hub
@@ -36,10 +36,9 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 
 	ctx := context.Background()
 
-	// 1. Upsert aircraft record (dùng event.ID làm icao24 cho military objects)
 	aircraft := &model.Aircraft{
 		ICAO24:      event.ID,
-		Callsign:    event.ID, // military objects dùng ID làm callsign
+		Callsign:    event.ID,
 		Type:        event.Type,
 		Status:      model.StatusActive,
 		ThreatLevel: event.ThreatLevel,
@@ -48,10 +47,8 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 
 	if err := h.service.SaveAircraft(ctx, aircraft); err != nil {
 		log.Printf("[military-handler] SaveAircraft error for %s: %v", event.ID, err)
-		// Không return – vẫn tiếp tục forward lên hub
 	}
 
-	// 2. Upsert tracking position
 	tracking := &model.Tracking{
 		ICAO24:      event.ID,
 		Lat:         event.Lat,
@@ -66,7 +63,6 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 		log.Printf("[military-handler] UpdateTracking error for %s: %v", event.ID, err)
 	}
 
-	// 3. Forward lên WebSocket Hub
 	radarObj := hub.RadarObject{
 		ID:               event.ID,
 		Type:             event.Type,
@@ -79,7 +75,6 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 		Heading:          event.Heading,
 		ThreatLevel:      string(event.ThreatLevel),
 		Status:           event.Status,
-		BatteryPct:       event.BatteryPct,
 		TargetLat:        event.TargetLat,
 		TargetLon:        event.TargetLon,
 		RemainingRangeKm: event.RemainingRangeKm,
