@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package battlefield;
+
+option go_package = "battlefield/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// ─── Civil Aviation ───────────────────────────────────────────────
+
+// FlightEvent: dữ liệu máy bay dân sự từ OpenSky Network
+message FlightEvent {
+  string icao24    = 1;
+  string callsign  = 2;
+  double lat       = 3;
+  double lon       = 4;
+  double alt       = 5;
+  double speed     = 6;
+  double heading   = 7;
+  google.protobuf.Timestamp ts = 8;
+}
+
+// ─── Military Simulation ─────────────────────────────────────────
+
+enum ObjectType {
+  OBJECT_TYPE_UNSPECIFIED = 0;
+  UAV                     = 1;
+  MISSILE                 = 2;
+  THREAT                  = 3;
+}
+
+enum ThreatLevel {
+  THREAT_LEVEL_UNSPECIFIED = 0;
+  LOW                      = 1;
+  MEDIUM                   = 2;
+  HIGH                     = 3;
+  CRITICAL                 = 4;
+}
+
+// MilitaryEvent: dữ liệu đối tượng quân sự giả lập
+message MilitaryEvent {
+  string      id           = 1;
+  ObjectType  type         = 2;
+  double      lat          = 3;
+  double      lon          = 4;
+  double      alt          = 5;
+  double      heading      = 6;
+  double      speed        = 7;
+  ThreatLevel threat_level = 8;
+  string      status       = 9;
+  google.protobuf.Timestamp ts = 10;
+}
+
+// ─── Radar gRPC Service ───────────────────────────────────────────
+
+// Layer phân biệt nguồn gốc đối tượng
+enum Layer {
+  LAYER_UNSPECIFIED = 0;
+  CIVIL             = 1;
+  MILITARY          = 2;
+}
+
+// RadarObject: representation thống nhất mọi đối tượng trên radar
+message RadarObject {
+  string     id           = 1;
+  ObjectType type         = 2;
+  Layer      layer        = 3;
+  string     callsign     = 4;
+  double     lat          = 5;
+  double     lon          = 6;
+  double     alt          = 7;
+  double     speed        = 8;
+  double     heading      = 9;
+  ThreatLevel threat_level = 10;
+  string     status       = 11;
+  google.protobuf.Timestamp last_updated = 12;
+}
+
+// SnapshotStats: thống kê tổng hợp
+message SnapshotStats {
+  int32 total_objects    = 1;
+  int32 civil_aircraft   = 2;
+  int32 uav_count        = 3;
+  int32 missile_count    = 4;
+  int32 threat_count     = 5;
+  int32 critical_threats = 6;
+}
+
+// RadarSnapshot: payload gửi về client mỗi 100ms
+message RadarSnapshot {
+  google.protobuf.Timestamp snapshot_at = 1;
+  repeated RadarObject      objects     = 2;
+  SnapshotStats             stats       = 3;
+}
+
+// StreamRadarRequest: request từ client (hiện tại trống, có thể thêm filter sau)
+message StreamRadarRequest {}
+
+// RadarService: gRPC service cho real-time radar streaming
+service RadarService {
+  // StreamRadar: server-streaming RPC, push RadarSnapshot mỗi 100ms
+  rpc StreamRadar(StreamRadarRequest) returns (stream RadarSnapshot);
+}

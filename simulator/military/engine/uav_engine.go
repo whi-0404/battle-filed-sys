@@ -6,9 +6,11 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"simulator/military/model"
+	bfpb "simulator/proto"
 	"simulator/military/publisher"
 	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -16,162 +18,117 @@ const (
 	uavCount        = 15
 
 	// Bounding box Việt Nam
-	uavLatMin = 9.0
-	uavLatMax = 23.0
-	uavLonMin = 102.5
-	uavLonMax = 109.5
+	latMin = 9.0
+	latMax = 23.0
+	lonMin = 102.5
+	lonMax = 109.5
 
 	uavAltMin   = 500.0
 	uavAltMax   = 5000.0
 	uavSpeedMin = 80.0
 	uavSpeedMax = 180.0
-
 )
 
+// uavState lưu trạng thái nội bộ của một UAV (không serialize)
+type uavState struct {
+	id      string
+	lat     float64
+	lon     float64
+	alt     float64
+	heading float64
+	speed   float64
+}
+
+// UAVEngine quản lý tất cả UAV objects
 type UAVEngine struct {
 	pub  *publisher.NatsPublisher
-	uavs []*model.MilitaryObject
+	uavs []*uavState
 }
 
 func NewUAVEngine(pub *publisher.NatsPublisher) *UAVEngine {
 	e := &UAVEngine{pub: pub}
-	e.spawnUAVs()
-	return e
-}
-
-func (e *UAVEngine) spawnUAVs() {
-	e.uavs = make([]*model.MilitaryObject, uavCount)
 	for i := 0; i < uavCount; i++ {
-		lat := uavLatMin + rand.Float64()*(uavLatMax-uavLatMin)
-		lon := uavLonMin + rand.Float64()*(uavLonMax-uavLonMin)
-		e.uavs[i] = &model.MilitaryObject{
-			ID:          fmt.Sprintf("UAV-%03d", i+1),
-			Type:        model.ObjUAV,
-			Status:      model.StatusActive,
-			Lat:         lat,
-			Lon:         lon,
-			Alt:         uavAltMin + rand.Float64()*(uavAltMax-uavAltMin),
-			Heading:     rand.Float64() * 360,
-			Speed:       uavSpeedMin + rand.Float64()*(uavSpeedMax-uavSpeedMin),
-			BaseLat:     lat,
-			BaseLon:     lon,
-			ThreatLevel: model.ThreatLow,
-		}
+		e.uavs = append(e.uavs, &uavState{
+			id:      fmt.Sprintf("UAV-%03d", i+1),
+			lat:     latMin + rand.Float64()*(latMax-latMin),
+			lon:     lonMin + rand.Float64()*(lonMax-lonMin),
+			alt:     uavAltMin + rand.Float64()*(uavAltMax-uavAltMin),
+			heading: rand.Float64() * 360,
+			speed:   uavSpeedMin + rand.Float64()*(uavSpeedMax-uavSpeedMin),
+		})
 	}
 	log.Printf("[uav-engine] Spawned %d UAVs", uavCount)
+	return e
 }
 
 func (e *UAVEngine) Run(ctx context.Context) {
 	ticker := time.NewTicker(uavTickInterval)
-	defer ticker.Stop() 
-
+	defer ticker.Stop()
 	log.Println("[uav-engine] Started – tick every", uavTickInterval)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[uav-engine] Shutting down")
+			log.Println("[uav-engine] Shutdown")
 			return
 		case <-ticker.C:
 			for _, uav := range e.uavs {
-				e.updateUAV(uav)
-				e.pub.Publish(toEvent(uav))
+				move(uav, uavTickInterval)
+				e.pub.Publish(&bfpb.MilitaryEvent{
+					Id:          uav.id,
+					Type:        bfpb.ObjectType_UAV,
+					Lat:         uav.lat,
+					Lon:         uav.lon,
+					Alt:         uav.alt,
+					Heading:     uav.heading,
+					Speed:       uav.speed,
+					ThreatLevel: bfpb.ThreatLevel_LOW,
+					Status:      "ACTIVE",
+					Ts:          timestamppb.Now(),
+				})
 			}
 		}
 	}
 }
 
-func (e *UAVEngine) updateUAV(uav *model.MilitaryObject) {
-	dtHours := uavTickInterval.Hours()
+// ─── Internal state & shared movement helpers ─────────────────────
 
-	if uav.BatteryPct < 0 {
-		uav.BatteryPct = 0
+// move di chuyển uavState theo heading + bounce khi ra biên
+func move(s *uavState, dt time.Duration) {
+	distKm := knotsToKmh(s.speed) * dt.Hours()
+
+	newLat, newLon := movePosition(s.lat, s.lon, s.heading, distKm)
+
+	if newLat < latMin || newLat > latMax || newLon < lonMin || newLon > lonMax {
+		s.heading = math.Mod(s.heading+180, 360)
+		newLat, newLon = movePosition(s.lat, s.lon, s.heading, distKm)
 	}
 
-	if uav.BatteryPct < 20 && uav.Status == model.StatusActive {
-		uav.Status = model.StatusReturning
-		uav.Heading = bearingTo(uav.Lat, uav.Lon, uav.BaseLat, uav.BaseLon)
-		log.Printf("[uav-engine] %s low battery (%.1f%%), returning to base", uav.ID, uav.BatteryPct)
-	}
-
-	if uav.Status == model.StatusReturning {
-		distKm := haversine(uav.Lat, uav.Lon, uav.BaseLat, uav.BaseLon)
-		if distKm < 0.5 {
-			uav.BatteryPct = 100
-			uav.Status = model.StatusActive
-			uav.Heading = rand.Float64() * 360
-			log.Printf("[uav-engine] %s recharged, resuming patrol", uav.ID)
-		}
-	}
-
-	distKm := knotsToKmh(uav.Speed) * dtHours
-	newLat, newLon := movePosition(uav.Lat, uav.Lon, uav.Heading, distKm)
-
-	if newLat < uavLatMin || newLat > uavLatMax || newLon < uavLonMin || newLon > uavLonMax {
-		uav.Heading = math.Mod(uav.Heading+180, 360)
-		newLat, newLon = movePosition(uav.Lat, uav.Lon, uav.Heading, distKm)
-	}
-
-	uav.Lat = newLat
-	uav.Lon = newLon
-
-	if uav.Status == model.StatusActive {
-		uav.Heading = math.Mod(uav.Heading+(rand.Float64()*4-2)+360, 360)
-	}
+	s.lat = newLat
+	s.lon = newLon
+	s.heading = math.Mod(s.heading+(rand.Float64()*4-2)+360, 360)
 }
 
-func toEvent(obj *model.MilitaryObject) model.MilitaryEvent {
-	return model.MilitaryEvent{
-		ID:          obj.ID,
-		Type:        obj.Type,
-		Lat:         obj.Lat,
-		Lon:         obj.Lon,
-		Alt:         obj.Alt,
-		Heading:     obj.Heading,
-		Speed:       obj.Speed,
-		ThreatLevel: obj.ThreatLevel,
-		Status:      obj.Status,
-		TargetLat:   obj.TargetLat,
-		TargetLon:   obj.TargetLon,
-		Timestamp:   time.Now(),
-	}
-}
+// ─── Geo math ─────────────────────────────────────────────────────
 
 const earthRadiusKm = 6371.0
 
 func deg2rad(d float64) float64 { return d * math.Pi / 180 }
 func rad2deg(r float64) float64 { return r * 180 / math.Pi }
 
-func haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	dLat := deg2rad(lat2 - lat1)
-	dLon := deg2rad(lon2 - lon1)
-	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
-		math.Cos(deg2rad(lat1))*math.Cos(deg2rad(lat2))*
-			math.Sin(dLon/2)*math.Sin(dLon/2)
-	return earthRadiusKm * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-}
-
-func bearingTo(lat1, lon1, lat2, lon2 float64) float64 {
-	dLon := deg2rad(lon2 - lon1)
-	y := math.Sin(dLon) * math.Cos(deg2rad(lat2))
-	x := math.Cos(deg2rad(lat1))*math.Sin(deg2rad(lat2)) -
-		math.Sin(deg2rad(lat1))*math.Cos(deg2rad(lat2))*math.Cos(dLon)
-	return math.Mod(rad2deg(math.Atan2(y, x))+360, 360)
-}
-
 func movePosition(lat, lon, headingDeg, distKm float64) (float64, float64) {
-	angDist := distKm / earthRadiusKm
-	headingRad := deg2rad(headingDeg)
-	lat1 := deg2rad(lat)
-	lon1 := deg2rad(lon)
+	ang := distKm / earthRadiusKm
+	hr := deg2rad(headingDeg)
+	la := deg2rad(lat)
+	lo := deg2rad(lon)
 
-	lat2 := math.Asin(math.Sin(lat1)*math.Cos(angDist) +
-		math.Cos(lat1)*math.Sin(angDist)*math.Cos(headingRad))
-	lon2 := lon1 + math.Atan2(
-		math.Sin(headingRad)*math.Sin(angDist)*math.Cos(lat1),
-		math.Cos(angDist)-math.Sin(lat1)*math.Sin(lat2),
+	lat2 := math.Asin(math.Sin(la)*math.Cos(ang) +
+		math.Cos(la)*math.Sin(ang)*math.Cos(hr))
+	lon2 := lo + math.Atan2(
+		math.Sin(hr)*math.Sin(ang)*math.Cos(la),
+		math.Cos(ang)-math.Sin(la)*math.Sin(lat2),
 	)
 	return rad2deg(lat2), rad2deg(lon2)
 }
 
-func knotsToKmh(knots float64) float64 { return knots * 1.852 }
+func knotsToKmh(k float64) float64 { return k * 1.852 }
