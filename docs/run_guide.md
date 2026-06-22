@@ -1,72 +1,102 @@
-# Hướng dẫn chạy Full Project Battlefield Radar
+# Hướng Dẫn Vận Hành Hệ Thống Battlefield Radar (Từ A-Z)
 
-Tài liệu này hướng dẫn chi tiết cách khởi chạy toàn bộ hệ thống từ Database, Backend, Simulator đến Client (Flutter).
-
-## 1. Yêu cầu hệ thống (Prerequisites)
-- **Docker & Docker Compose**: Để chạy PostgreSQL và NATS.
-- **Go (Golang)**: Phiên bản 1.20 trở lên để chạy Backend và Simulator.
-- **Flutter SDK**: Phiên bản 3.0+ để chạy Client.
-- **golang-migrate**: Dùng để chạy file migration database (Tuỳ chọn nếu bạn chạy bằng script trực tiếp trong DB).
-
-## 2. Khởi chạy Hạ tầng (Infrastructure)
-Hệ thống yêu cầu NATS (Message Broker) và PostgreSQL (Database).
-1. Mở terminal tại thư mục `backend`.
-2. Tạo file `.env` dựa trên `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-   *Cập nhật thông tin trong file `.env` nếu cần thiết (ví dụ: POSTGRES_USER, POSTGRES_PASSWORD, DB_NAME).*
-3. Chạy các container bằng Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
-   *NATS sẽ chạy ở port 4222, Postgres sẽ chạy ở port 5432.*
-
-4. **Chạy Database Migration:**
-   Sử dụng công cụ `golang-migrate` để nạp các file schema trong thư mục `backend/migrations/` vào Database:
-   ```bash
-   migrate -path migrations -database "postgres://<user>:<password>@localhost:5432/<dbname>?sslmode=disable" up
-   ```
-
-## 3. Khởi chạy Backend (Core Server)
-Backend sẽ hứng dữ liệu từ NATS, lưu vào Postgres và mở gRPC Server tại port 50051.
-1. Mở terminal tại thư mục `backend`.
-2. Tải các dependencies (nếu chưa có):
-   ```bash
-   go mod tidy
-   ```
-3. Chạy Backend:
-   ```bash
-   go run cmd/main.go
-   ```
-   *Console sẽ in ra log "Connected to NATS", "Database connected" và "gRPC server listening on :50051".*
-
-## 4. Khởi chạy Simulator (Nguồn phát dữ liệu)
-Simulator lấy dữ liệu OpenSky và tạo giả lập quân sự, sau đó đẩy lên NATS.
-1. Mở một terminal mới tại thư mục `simulator`.
-2. (Tùy chọn) Cấu hình `.env` cho OpenSky API auth nếu cần để tránh bị giới hạn lượt gọi (Rate-limit).
-3. Chạy Simulator:
-   ```bash
-   go run cmd/main.go
-   ```
-   *Console sẽ in ra log "Published: ICAO..." và các Engine quân sự đã khởi chạy.*
-
-## 5. Khởi chạy Client (Flutter Radar)
-Client dùng gRPC để nhận dữ liệu Real-time từ Backend và render lên bản đồ.
-1. Mở một terminal mới tại thư mục `client`.
-2. Tải các package Flutter:
-   ```bash
-   flutter pub get
-   ```
-3. Chạy ứng dụng trên nền tảng mong muốn (ưu tiên Desktop/Windows để gRPC hoạt động mượt mà với `localhost`):
-   ```bash
-   flutter run -d windows
-   ```
-   *Lưu ý: Nếu bạn chạy trên trình duyệt (Web), gRPC nguyên bản sẽ không hỗ trợ và Client sẽ tự động rơi vào chế độ Mock Simulation.*
-4. Radar sẽ hiển thị bản đồ Việt Nam, các đường ScanLine, GridLayer và các máy bay (Civil/Military) di chuyển theo thời gian thực (10 khung hình / 1 giây).
+Tài liệu này hướng dẫn bạn cách khởi động toàn bộ hệ thống từ con số 0, bao gồm việc nạp dữ liệu lịch sử (Ingest Data), khởi chạy Backend, Simulator và giao diện Flutter Client.
 
 ---
-**Troubleshooting (Sửa lỗi thường gặp):**
-- **Trắng màn hình hoặc Lỗi tải Map (404):** Hãy chắc chắn bạn có kết nối mạng Internet để thư viện `flutter_map` tải bản đồ (CartoDB Dark).
-- **Client không thấy object thật (Tự chạy fallback object):** Có thể Client không gọi được `localhost:50051` (Do chạy trên Emulator Android/iOS). Hãy chạy app bằng `windows` hoặc đổi `localhost` trong mã nguồn Flutter thành IP LAN của Backend.
-- **Xung đột Port (Port conflict):** Đảm bảo các port `5432` (Postgres), `4222` (NATS), và `50051` (gRPC) trên máy bạn không bị ứng dụng khác chiếm dụng trước khi bật.
+
+## 1. Yêu Cầu Hệ Thống (Prerequisites)
+- **Docker & Docker Compose:** Dành cho việc chạy PostgreSQL và NATS Server.
+- **Go (Golang):** Phiên bản >= 1.20 để chạy Backend và Simulator.
+- **Flutter SDK:** Cài đặt sẵn để chạy giao diện Client. (Khuyến nghị bật chế độ Desktop: `flutter config --enable-windows-desktop`).
+
+---
+
+## 2. Bước 1: Khởi Động Hạ Tầng (Infrastructure)
+
+Mở Terminal (Command Prompt / PowerShell) và đi tới thư mục `backend`:
+```bash
+cd backend
+docker-compose up -d
+```
+Lệnh này sẽ tải và chạy 2 container ở chế độ ngầm (background):
+- **PostgreSQL:** Chạy trên port `5432` (Username: `admin`, Password: `postgres`, DB: `battlefield`).
+- **NATS Message Broker:** Chạy trên port `4222`.
+
+---
+
+## 3. Bước 2: Nạp Dữ Liệu Lịch Sử (Data Ingestion)
+
+Để Simulator có dữ liệu bay để mô phỏng, chúng ta cần nạp các file CSV từ OpenSky vào Database.
+
+1. Đảm bảo bạn đã có các file CSV dữ liệu bay (Ví dụ: `states_2022-06-20-00.csv`) nằm trong thư mục `backend/data-crawl/`.
+2. Mở Terminal tại thư mục `backend` và chạy tool Ingester:
+   ```bash
+   cd backend
+   go run cmd/ingester/main.go
+   ```
+3. Chờ đợi phép màu xảy ra. Nhờ được tối ưu bằng lệnh `COPY`, hệ thống sẽ "nhồi" hơn **3.7 triệu bản ghi** vào PostgreSQL chỉ trong vỏn vẹn **1 đến 2 phút**. Khi terminal báo `Ingestion completed 100%`, bạn đã sẵn sàng!
+
+---
+
+## 4. Bước 3: Khởi Chạy Backend Server
+
+Mở một Terminal **MỚI**, giữ nguyên terminal cũ nếu muốn.
+```bash
+cd backend
+go run cmd/main.go
+```
+Backend sẽ làm 2 việc:
+- Kết nối tới NATS để hứng dữ liệu.
+- Mở cổng gRPC `50051`. 
+Khi bạn thấy dòng log `[main] gRPC server listening on :50051`, Backend đã vào tư thế sẵn sàng phục vụ.
+
+---
+
+## 5. Bước 4: Khởi Chạy Simulator (Máy Phát Dữ Luệu)
+
+Mở một Terminal **MỚI**.
+Simulator sẽ kết nối tới DB, đọc dữ liệu `track_history`, nội suy tọa độ và bắn lên NATS.
+
+```bash
+cd simulator
+
+# Trên Windows PowerShell:
+$env:DATABASE_URL="postgres://admin:postgres@localhost:5432/battlefield?sslmode=disable"
+go run cmd/main.go
+
+# Hoặc trên Git Bash / Linux / macOS:
+DATABASE_URL="postgres://admin:postgres@localhost:5432/battlefield?sslmode=disable" go run cmd/main.go
+```
+Khi Simulator báo `Started replay from...`, nghĩa là dữ liệu đã bắt đầu tuôn trào trên hệ thống mạng NATS!
+
+---
+
+## 6. Bước 5: Khởi Chạy Giao Diện Flutter (Client)
+
+Mở một Terminal **MỚI** cuối cùng.
+```bash
+cd client
+flutter pub get
+```
+
+Chạy ứng dụng dưới dạng Desktop App (Tối ưu và mượt nhất cho gRPC):
+```bash
+flutter run -d windows
+```
+
+### ⚠️ Lưu ý Dành Cho Máy Ảo Android (Android Emulator)
+Nếu bạn không chạy Desktop mà chạy trên điện thoại ảo Android, app sẽ bị lỗi không kết nối được `localhost`.
+**Cách sửa:** Mở file `client/lib/services/radar_service.dart`, tìm dòng 9:
+```dart
+static const String _host = 'localhost'; 
+```
+Sửa thành:
+```dart
+static const String _host = '10.0.2.2'; 
+```
+Sau đó lưu lại và nhấn `R` (Hot Restart) trên terminal.
+
+---
+
+## 🎉 Tận Hưởng Kết Quả
+Ngay khi ứng dụng Flutter hiện lên, bản đồ sẽ tự động chuyển về chế độ Dark Mode, và bạn sẽ thấy hàng ngàn chuyến bay dân dụng cùng với các UAV, Tên lửa nhấp nháy và di chuyển mượt mà liên tục mỗi giây!
