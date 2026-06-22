@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"os/signal"
@@ -10,8 +11,8 @@ import (
 	"simulator/opensky/service"
 	"sync"
 	"syscall"
-	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/nats-io/nats.go"
 )
 
@@ -31,30 +32,27 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// OpenSky
+	// DB Connection
+	dbURL := getEnv("DATABASE_URL", "postgres://admin:postgres@localhost:5432/battlefield?sslmode=disable")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("[main] DB connection failed: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("[main] DB ping failed: %v", err)
+	}
+	log.Printf("[main] Connected to Postgres")
+
+	// Historical Poller (replaces OpenSky)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Println("(OpenSky poller)")
+		log.Println("(Historical Poller)")
 
-		username := os.Getenv("OPENSKY_USERNAME")
-		password := os.Getenv("OPENSKY_PASSWORD")
-
-		civilClient := service.NewOpenSkyClient(username, password, nc)
-
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				log.Println("[civil-layer] Shutting down")
-				return
-			case <-ticker.C:
-				log.Println("[civil-layer] Polling OpenSky API...")
-				civilClient.PollOpenSky()
-			}
-		}
+		poller := service.NewHistoricalPoller(db, nc)
+		poller.Run(ctx)
 	}()
 
 	// Military Simulation (UAV/Missile/Threat)

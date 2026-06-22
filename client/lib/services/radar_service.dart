@@ -52,10 +52,9 @@ class RadarGrpcService {
           _controller.add(RadarSnapshotModel.fromProto(snap));
         },
         onError: (e) {
-          print('[radar] gRPC error → simulation: $e');
+          print('[radar] gRPC error: $e');
           _connected = false;
           _channel?.shutdown();
-          _startSimulation();
         },
         onDone: () {
           _connected = false;
@@ -63,16 +62,15 @@ class RadarGrpcService {
         },
       );
 
-      // Đợi 1 giây xem có nhận được data không
-      await Future.delayed(const Duration(seconds: 1));
+      // Đợi 5 giây xem có nhận được data không (tăng thời gian chờ)
+      await Future.delayed(const Duration(seconds: 5));
       if (!firstReceived) {
-        print('[radar] No data from gRPC → simulation mode');
-        _channel?.shutdown();
-        _startSimulation();
+        print('[radar] No data from gRPC after 5 seconds. Still waiting...');
+        // Đã xoá fallback _startSimulation() ở đây để ép buộc dùng dữ liệu thật
       }
     } catch (e) {
-      print('[radar] Cannot connect → simulation: $e');
-      _startSimulation();
+      print('[radar] Cannot connect gRPC: $e');
+      // Đã xoá _startSimulation() để không dùng data ảo
     }
   }
 

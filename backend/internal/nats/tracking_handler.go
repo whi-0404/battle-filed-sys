@@ -2,10 +2,9 @@ package nats
 
 import (
 	grpcserver "battlefiled-sys/internal/grpcserver"
-	"battlefiled-sys/internal/tracking/model"
+	// "battlefiled-sys/internal/tracking/model"
 	"battlefiled-sys/internal/tracking/service"
 	bfpb "battlefiled-sys/proto"
-	"context"
 	"log"
 
 	"github.com/nats-io/nats.go"
@@ -30,9 +29,10 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 		return
 	}
 
-	ctx := context.Background()
+	// ctx := context.Background()
 	ts := event.GetTs().AsTime()
 
+	/*
 	// Upsert aircraft
 	aircraft := model.NewAircraft(event.GetCallsign(), model.ObjAircraft)
 	aircraft.ICAO24 = event.GetIcao24()
@@ -53,8 +53,10 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 	}); err != nil {
 		log.Printf("[civil-handler] UpdateTracking error: %v", err)
 	}
+	*/
 
-	// Insert tracking history
+	// Insert tracking history (DISABLED during simulation to reduce load)
+	/*
 	if err := h.service.SaveTrackingHistory(ctx, &model.TrackingHistory{
 		ICAO24:     event.GetIcao24(),
 		Lat:        event.GetLat(),
@@ -66,6 +68,7 @@ func (h *TrackingHandler) HandlePositionUpdate(msg *nats.Msg) {
 	}); err != nil {
 		log.Printf("[civil-handler] SaveTrackingHistory error: %v", err)
 	}
+	*/
 
 	// Forward lên gRPC RadarServer
 	h.server.UpsertObject(&bfpb.RadarObject{
