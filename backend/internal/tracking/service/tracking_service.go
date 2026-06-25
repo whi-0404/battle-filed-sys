@@ -37,3 +37,17 @@ func (s *TrackingService) SaveAircraft(
 ) error {
 	return s.repo.SaveAircraft(ctx, aircraft)
 }
+
+func (s *TrackingService) BulkUpdateCurrentTrack(
+	ctx context.Context,
+	tracks []*model.Tracking,
+) error {
+	return s.repo.BulkUpdateCurrentTrack(ctx, tracks)
+}
+
+func (s *TrackingService) BulkSaveAircraft(
+	ctx context.Context,
+	aircrafts []*model.Aircraft,
+) error {
+	return s.repo.BulkSaveAircraft(ctx, aircrafts)
+}

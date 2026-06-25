@@ -10,7 +10,8 @@ import '../../theme/app_theme.dart';
 
 class ObjectDetailPage extends StatelessWidget {
   final RadarObjectModel object;
-  const ObjectDetailPage({super.key, required this.object});
+  final VoidCallback? onClose;
+  const ObjectDetailPage({super.key, required this.object, this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +36,13 @@ class ObjectDetailPage extends StatelessWidget {
                 ),
                 child: const Icon(Icons.arrow_back, color: AppTheme.textPrimary, size: 16),
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (onClose != null) {
+                  onClose!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
             flexibleSpace: FlexibleSpaceBar(
               background: _buildMiniMap(),

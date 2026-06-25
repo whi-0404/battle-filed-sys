@@ -55,32 +55,22 @@ func main() {
 		poller.Run(ctx)
 	}()
 
-	// Military Simulation (UAV/Missile/Threat)
+	// Military Simulation Engines
 	militaryPub := publisher.NewNatsPublisher(nc)
 
-	// UAV Engine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		uavEngine := engine.NewUAVEngine(militaryPub)
-		uavEngine.Run(ctx)
-	}()
+	engines := []engine.Engine{
+		engine.NewUAVEngine(militaryPub),
+		engine.NewMissileEngine(militaryPub),
+		engine.NewThreatEngine(militaryPub),
+	}
 
-	// Missile Engine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		missileEngine := engine.NewMissileEngine(militaryPub)
-		missileEngine.Run(ctx)
-	}()
-
-	// Threat Engine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		threatEngine := engine.NewThreatEngine(militaryPub)
-		threatEngine.Run(ctx)
-	}()
+	for _, eng := range engines {
+		wg.Add(1)
+		go func(e engine.Engine) {
+			defer wg.Done()
+			e.Run(ctx)
+		}(eng)
+	}
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	quit := make(chan os.Signal, 1)

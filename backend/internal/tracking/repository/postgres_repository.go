@@ -152,3 +152,68 @@ func (r *PostgresRepository) SaveAircraft(
 	}
 	return nil
 }
+
+func (r *PostgresRepository) BulkUpdateCurrentTrack(
+	ctx context.Context,
+	tracks []*model.Tracking,
+) error {
+	if len(tracks) == 0 {
+		return nil
+	}
+	_, err := r.db.NamedExecContext(
+		ctx,
+		`
+		INSERT INTO tracking (
+			icao24,
+			latitude,
+			longitude,
+			altitude,
+			speed,
+			heading,
+			last_updated
+		)
+		VALUES (:icao24, :latitude, :longitude, :altitude, :speed, :heading, :last_updated)
+		ON CONFLICT (icao24)
+		DO UPDATE SET
+			latitude = EXCLUDED.latitude,
+			longitude = EXCLUDED.longitude,
+			altitude = EXCLUDED.altitude,
+			speed = EXCLUDED.speed,
+			heading = EXCLUDED.heading,
+			last_updated = EXCLUDED.last_updated
+		`,
+		tracks,
+	)
+	return err
+}
+
+func (r *PostgresRepository) BulkSaveAircraft(
+	ctx context.Context,
+	aircrafts []*model.Aircraft,
+) error {
+	if len(aircrafts) == 0 {
+		return nil
+	}
+	_, err := r.db.NamedExecContext(
+		ctx,
+		`
+		INSERT INTO aircraft (
+			icao24,
+			callsign,
+			type,
+			status,
+			created_at,
+			updated_at
+		)
+		VALUES (:icao24, :callsign, :type, :status, :created_at, :updated_at)
+		ON CONFLICT (icao24)
+		DO UPDATE SET
+			callsign = EXCLUDED.callsign,
+			type = EXCLUDED.type,
+			status = EXCLUDED.status,
+			updated_at = EXCLUDED.updated_at
+		`,
+		aircrafts,
+	)
+	return err
+}

@@ -20,4 +20,14 @@ type TrackingRepository interface {
 		ctx context.Context,
 		aircraft *model.Aircraft,
 	) error
+
+	BulkUpdateCurrentTrack(
+		ctx context.Context,
+		tracks []*model.Tracking,
+	) error
+
+	BulkSaveAircraft(
+		ctx context.Context,
+		aircrafts []*model.Aircraft,
+	) error
 }

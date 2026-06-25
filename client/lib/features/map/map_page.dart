@@ -28,6 +28,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   late AnimationController _panelController;
   late Animation<Offset> _panelSlide;
 
+  // Animation controller cho detail panel
+  late AnimationController _detailController;
+  late Animation<Offset> _detailSlide;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +44,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _panelController, curve: Curves.easeOutCubic));
 
+    _detailController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _detailSlide = Tween<Offset>(
+      begin: const Offset(1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _detailController, curve: Curves.easeOutCubic));
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RadarProvider>().connect();
     });
@@ -48,6 +61,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _panelController.dispose();
+    _detailController.dispose();
     super.dispose();
   }
 
@@ -65,24 +79,17 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _panelController.reverse();
   }
 
+  void _closeDetail() {
+    _detailController.reverse().then((_) {
+      if (mounted) setState(() => _selectedObject = null);
+    });
+  }
+
   void _onMarkerTap(RadarObjectModel obj) {
     // Center map on object
     _mapController.move(LatLng(obj.lat, obj.lon), _mapController.camera.zoom);
-    // Navigate to detail
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => ObjectDetailPage(object: obj),
-        transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-            child: child,
-          );
-        },
-      ),
-    );
+    setState(() => _selectedObject = obj);
+    _detailController.forward();
   }
 
   @override
@@ -134,6 +141,28 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               ),
             ),
           ),
+
+          // ─── Object Detail Panel ────────────────────────────────
+          if (_selectedObject != null)
+            Positioned(
+              top: 0, bottom: 0, right: 0,
+              width: MediaQuery.of(context).size.width * 0.48,
+              child: SlideTransition(
+                position: _detailSlide,
+                child: Container(
+                  decoration: BoxDecoration(
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20)],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                    child: ObjectDetailPage(
+                      object: _selectedObject!,
+                      onClose: _closeDetail,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

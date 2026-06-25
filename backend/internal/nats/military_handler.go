@@ -7,6 +7,7 @@ import (
 	bfpb "battlefiled-sys/proto"
 	"context"
 	"log"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -17,10 +18,59 @@ import (
 type MilitaryHandler struct {
 	service *service.TrackingService
 	server  *grpcserver.RadarServer
+
+	aircraftChan chan *model.Aircraft
+	trackingChan chan *model.Tracking
 }
 
 func NewMilitaryHandler(svc *service.TrackingService, srv *grpcserver.RadarServer) *MilitaryHandler {
-	return &MilitaryHandler{service: svc, server: srv}
+	h := &MilitaryHandler{
+		service:      svc,
+		server:       srv,
+		aircraftChan: make(chan *model.Aircraft, 100000),
+		trackingChan: make(chan *model.Tracking, 100000),
+	}
+	go h.startBatchWorker()
+	return h
+}
+
+func (h *MilitaryHandler) startBatchWorker() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	aircraftBatch := make(map[string]*model.Aircraft)
+	trackingBatch := make(map[string]*model.Tracking)
+
+	for {
+		select {
+		case a := <-h.aircraftChan:
+			aircraftBatch[a.ICAO24] = a
+		case t := <-h.trackingChan:
+			trackingBatch[t.ICAO24] = t
+		case <-ticker.C:
+			if len(aircraftBatch) > 0 {
+				list := make([]*model.Aircraft, 0, len(aircraftBatch))
+				for _, a := range aircraftBatch {
+					list = append(list, a)
+				}
+				if err := h.service.BulkSaveAircraft(context.Background(), list); err != nil {
+					log.Printf("[military-handler] BulkSaveAircraft error: %v", err)
+				}
+				aircraftBatch = make(map[string]*model.Aircraft)
+			}
+
+			if len(trackingBatch) > 0 {
+				list := make([]*model.Tracking, 0, len(trackingBatch))
+				for _, t := range trackingBatch {
+					list = append(list, t)
+				}
+				if err := h.service.BulkUpdateCurrentTrack(context.Background(), list); err != nil {
+					log.Printf("[military-handler] BulkUpdateTracking error: %v", err)
+				}
+				trackingBatch = make(map[string]*model.Tracking)
+			}
+		}
+	}
 }
 
 func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
@@ -30,23 +80,26 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 		return
 	}
 
-	ctx := context.Background()
 	objType := protoTypeToModel(event.GetType())
 	ts := event.GetTs().AsTime()
 
-	// Upsert aircraft record
-	if err := h.service.SaveAircraft(ctx, &model.Aircraft{
+	// Push to batch channel (non-blocking if possible, but large buffer used)
+	select {
+	case h.aircraftChan <- &model.Aircraft{
 		ICAO24:      event.GetId(),
 		Callsign:    event.GetId(),
 		Type:        objType,
 		Status:      model.StatusActive,
 		ThreatLevel: model.ThreatLevel(event.GetThreatLevel().String()),
-	}); err != nil {
-		log.Printf("[military-handler] SaveAircraft error for %s: %v", event.GetId(), err)
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}:
+	default:
+		// Queue full, skip DB update for this tick
 	}
 
-	// Upsert tracking position
-	if err := h.service.UpdateTrackingCurrent(ctx, &model.Tracking{
+	select {
+	case h.trackingChan <- &model.Tracking{
 		ICAO24:      event.GetId(),
 		Lat:         event.GetLat(),
 		Lon:         event.GetLon(),
@@ -54,11 +107,12 @@ func (h *MilitaryHandler) HandleMilitaryUpdate(msg *nats.Msg) {
 		Heading:     event.GetHeading(),
 		Speed:       event.GetSpeed(),
 		LastUpdated: ts,
-	}); err != nil {
-		log.Printf("[military-handler] UpdateTracking error for %s: %v", event.GetId(), err)
+	}:
+	default:
+		// Queue full, skip DB update for this tick
 	}
 
-	// Forward lên gRPC RadarServer
+	// Forward lên gRPC RadarServer trực tiếp qua memory (real-time tuyệt đối)
 	h.server.UpsertObject(&bfpb.RadarObject{
 		Id:          event.GetId(),
 		Type:        event.GetType(),
